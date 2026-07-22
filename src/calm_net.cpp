@@ -46,7 +46,6 @@ void CalmServer::handle_client(int client_fd) {
         buffer[bytes] = '\0';
         std::string req(buffer);
         
-        // 简单处理包含换行符的命令
         size_t pos = req.find('\n');
         if (pos != std::string::npos) req = req.substr(0, pos);
         printf("[Network] Received cmd: %s\n", req.c_str());
@@ -54,6 +53,7 @@ void CalmServer::handle_client(int client_fd) {
         write(client_fd, reply.c_str(), reply.length());
     }
 }
+
 std::string CalmServer::process_command(const std::string& cmd) {
     std::istringstream iss(cmd);
     std::string action;
@@ -61,36 +61,50 @@ std::string CalmServer::process_command(const std::string& cmd) {
 
     if (action == "STATUS") {
         auto st = _ctrl.get_status();
-        char buf[256];
-        snprintf(buf, sizeof(buf), "{\"temp\":%.3f, \"temp2\":%.3f, \"target\":%.3f, \"duty\":%.2f, \"enabled\":%d}",
-                 st.current_temp, st.current_temp2, st.target_temp, st.current_duty, st.enabled ? 1 : 0);
+        char buf[384];
+        snprintf(buf, sizeof(buf),
+            "{\"ch1\":{\"temp\":%.3f,\"target\":%.1f,\"duty\":%.3f,\"enabled\":%d},"
+            "\"ch2\":{\"temp\":%.3f,\"target\":%.1f,\"duty\":%.3f,\"enabled\":%d}}",
+            st.temp1, st.target1, st.duty1, st.en1 ? 1 : 0,
+            st.temp2, st.target2, st.duty2, st.en2 ? 1 : 0);
         return std::string(buf);
-    } 
-    else if (action == "SET_EN") {
+    }
+
+    // 需要通道参数的命令: <CMD> <ch> <args...>
+    int ch;
+    if (iss >> ch) {
+        if (ch < 1 || ch > 2) return "ERROR: Channel must be 1 or 2";
+    } else {
+        return "ERROR: Missing channel. Format: <CMD> <1|2> <args...>";
+    }
+
+    if (action == "SET_EN") {
         int en; iss >> en;
-        _ctrl.set_enable(en > 0);
+        if (ch == 1) _ctrl.set_enable1(en > 0);
+        else         _ctrl.set_enable2(en > 0);
         return "OK";
     }
     else if (action == "SET_TARGET") {
-        float t; iss >> t;
-        _ctrl.set_target_temp(t);
+        float t; 
+        if (!(iss >> t)) return "ERROR: Missing temperature. Format: SET_TARGET <1|2> <temp>";
+        if (ch == 1) _ctrl.set_target_temp1(t);
+        else         _ctrl.set_target_temp2(t);
         return "OK";
     }
     else if (action == "SET_DUTY") {
-        float d; iss >> d;
-        _ctrl.set_manual_duty(d);
+        float d; 
+        if (!(iss >> d)) return "ERROR: Missing duty. Format: SET_DUTY <1|2> <duty>";
+        if (ch == 1) _ctrl.set_manual_duty1(d);
+        else         _ctrl.set_manual_duty2(d);
         return "OK";
     }
-    // 【新增的 PID 设置分支】
     else if (action == "SET_PID") {
         float p, i, d;
-        // 确保上位机发来了三个参数
-        if (iss >> p >> i >> d) {
-            _ctrl.set_pid(p, i, d);
-            return "OK";
-        } else {
-            return "ERROR: Missing PID parameters. Format: SET_PID <P> <I> <D>";
-        }
+        if (!(iss >> p >> i >> d))
+            return "ERROR: Missing parameters. Format: SET_PID <1|2> <P> <I> <D>";
+        if (ch == 1) _ctrl.set_pid1(p, i, d);
+        else         _ctrl.set_pid2(p, i, d);
+        return "OK";
     }
     
     return "ERROR: Unknown Command";

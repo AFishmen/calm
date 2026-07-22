@@ -4,8 +4,8 @@
 
 ## Features
 
-- **PID Temperature Control** — Classic PID algorithm with integral anti-windup clamping
-- **Software PWM Generation** — 1-second period, 100-step (10 ms) resolution, driven via GPIO
+- **Dual-Channel Independent PID Control** — Two independent PID loops (one per sensor), each with its own target, enable, gains, and PWM output
+- **Software PWM Generation** — 1-second period, 100-step (10 ms) resolution, two independent PWM outputs (MIO08 / MIO50)
 - **SPI Dual-Channel Temperature Sensing** — Bit-bang SPI interface for two MAX31865 chips, reading PT100 (RTD) temperature sensors with Callendar-Van Dusen conversion
 - **Manual Override Mode** — Bypass PID and set heater duty cycle directly (0.0–1.0)
 - **Remote Control via TCP** — Command-line interface over TCP port 8080
@@ -35,7 +35,8 @@ The code is tailored for the **Xilinx Zynq-7000** series (e.g., Z-7010, Z-7020) 
 
 | MIO Pin | Signal       | Function                        |
 |---------|-------------|---------------------------------|
-| 8       | Heater PWM  | Heater control output           |
+| 8       | PID1 PWM    | Channel 1 heater output (MIO08) |
+| 50      | PID2 PWM    | Channel 2 heater output (MIO50) |
 | 9       | SPI_CS2     | MAX31865 #2 chip select (CS2)   |
 | 10      | SPI1_MOSI   | SPI master-out-slave-in         |
 | 11      | SPI1_MISO   | SPI master-in-slave-out         |
@@ -92,11 +93,11 @@ nc 127.0.0.1 8080
 
 | Command                         | Description                        | Example Response         |
 |---------------------------------|------------------------------------|--------------------------|
-| `STATUS`                        | Get current system status (JSON)   | `{"temp":24.523, "temp2":24.817, "target":25.000, "duty":0.45, "enabled":1}` |
-| `SET_EN 0` or `SET_EN 1`        | Enable / disable heater            | `OK`                     |
-| `SET_TARGET <temp>`             | Set target temperature             | `OK`                     |
-| `SET_DUTY <duty>`               | Manual duty override (0.0–1.0)     | `OK`                     |
-| `SET_PID <P> <I> <D>`           | Tune PID gains                     | `OK`                     |
+| `STATUS`                        | Get both channels status (JSON)    | `{"ch1":{...},"ch2":{...}}` |
+| `SET_EN <1\|2> <0\|1>`         | Enable / disable channel          | `OK`                     |
+| `SET_TARGET <1\|2> <temp>`      | Set channel target temperature     | `OK`                     |
+| `SET_DUTY <1\|2> <duty>`        | Manual duty override per channel   | `OK`                     |
+| `SET_PID <1\|2> <P> <I> <D>`    | Tune PID gains per channel         | `OK`                     |
 | *anything else*                 | Unknown command                    | `ERROR: Unknown Command` |
 
 ## Controller Internals
@@ -106,11 +107,12 @@ nc 127.0.0.1 8080
 - Runs at a **10 ms** tick rate (100 ticks = 1 second full cycle)
 - Every **1 second** (tick 0):
   - Reads temperature from both MAX31865 channels via SPI bit-bang
-  - Computes PID output based on channel 1 temperature if enabled
-  - Prints debug info to stdout (both channel temperatures)
+  - Computes independent PID output for each enabled channel
+  - Each channel has its own target temperature, PID gains, and manual_mode flag
+  - Prints debug info to stdout (both channels)
 - Every tick:
-  - Compares current tick index against `duty × 100`
-  - Turns heater **on** if `tick < active_ticks`, **off** otherwise
+  - Compares current tick index against `duty × 100` per channel
+  - Drives PWM1 (MIO08) and PWM2 (MIO50) independently
 
 ### SPI Bit-Bang Protocol
 
@@ -162,8 +164,8 @@ This project is provided as-is for educational and evaluation purposes.
 
 ## 功能特性
 
-- **PID 温度控制** — 经典 PID 算法，带积分抗饱和钳位
-- **软件 PWM 生成** — 1 秒周期，100 步（10 ms）分辨率，通过 GPIO 驱动
+- **双通道独立 PID 控制** — 两路独立 PID 回路（每路一个传感器），各自拥有独立的目标温度、使能开关、PID 增益和 PWM 输出
+- **软件 PWM 生成** — 1 秒周期，100 步（10 ms）分辨率，两路独立 PWM 输出（MIO08 / MIO50）
 - **SPI 双通道温度采集** — 位脉冲 SPI 接口，连接两片 MAX31865 芯片，读取 PT100（RTD）温度传感器，使用 Callendar-Van Dusen 方程转换温度
 - **手动覆盖模式** — 绕过 PID，直接设置加热器占空比（0.0–1.0）
 - **通过 TCP 远程控制** — 通过 TCP 端口 8080 提供命令行接口
@@ -193,7 +195,8 @@ This project is provided as-is for educational and evaluation purposes.
 
 | MIO 引脚 | 信号      | 功能                        |
 |---------|----------|-----------------------------|
-| 8       | Heater PWM  | 加热器控制输出                 |
+| 8       | PID1 PWM    | 通道 1 加热器输出 (MIO08)       |
+| 50      | PID2 PWM    | 通道 2 加热器输出 (MIO50)       |
 | 9       | SPI_CS2     | MAX31865 #2 片选 (CS2)       |
 | 10      | SPI1_MOSI   | SPI 主机输出从机输入            |
 | 11      | SPI1_MISO   | SPI 主机输入从机输出            |
@@ -250,11 +253,11 @@ nc 127.0.0.1 8080
 
 | 命令                           | 描述                              | 示例响应                  |
 |---------------------------------|------------------------------------|--------------------------|
-| `STATUS`                        | 获取当前系统状态（JSON）            | `{"temp":24.523, "temp2":24.817, "target":25.000, "duty":0.45, "enabled":1}` |
-| `SET_EN 0` 或 `SET_EN 1`        | 启用/禁用加热器                    | `OK`                     |
-| `SET_TARGET <temp>`             | 设置目标温度                       | `OK`                     |
-| `SET_DUTY <duty>`               | 手动占空比覆盖（0.0–1.0）           | `OK`                     |
-| `SET_PID <P> <I> <D>`           | 调节 PID 增益系数                  | `OK`                     |
+| `STATUS`                        | 获取两路通道状态（JSON）           | `{"ch1":{...},"ch2":{...}}` |
+| `SET_EN <1\|2> <0\|1>`         | 启用/禁用指定通道                  | `OK`                     |
+| `SET_TARGET <1\|2> <temp>`      | 设置通道目标温度                   | `OK`                     |
+| `SET_DUTY <1\|2> <duty>`        | 通道手动占空比覆盖（0.0–1.0）       | `OK`                     |
+| `SET_PID <1\|2> <P> <I> <D>`    | 调节通道 PID 增益系数              | `OK`                     |
 | *其他任何输入*                   | 未知命令                           | `ERROR: Unknown Command` |
 
 ## 控制器内部原理
@@ -264,11 +267,12 @@ nc 127.0.0.1 8080
 - 以 **10 ms** 为节拍速率运行（100 个节拍 = 1 秒完整周期）
 - 每 **1 秒**（节拍 0）：
   - 通过 SPI 位脉冲从两个 MAX31865 通道读取温度
-  - 基于通道 1 温度计算 PID 输出（如果已启用）
-  - 将调试信息打印到标准输出（包含两路温度）
+  - 为每路已启用的通道独立计算 PID 输出
+  - 每个通道有独立的目标温度、PID 增益和手动模式标志
+  - 将调试信息打印到标准输出（两路通道）
 - 每个节拍：
-  - 将当前节拍索引与 `duty × 100` 进行比较
-  - 如果 `tick < active_ticks` 则打开加热器，否则关闭
+  - 分别比较当前节拍索引与各通道 `duty × 100`
+  - 独立驱动 PWM1 (MIO08) 和 PWM2 (MIO50)
 
 ### SPI 位脉冲协议
 

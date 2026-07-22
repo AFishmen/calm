@@ -57,11 +57,12 @@ int calm_hw_init(void) {
     *slcr_unlock = SLCR_UNLOCK_KEY;
     
     /* 配置所有使用到的 MIO 管脚为 GPIO:
-     * MIO08 → 加热器 PWM, MIO09 → SPI_CS2, MIO10 → SPI_MOSI,
+     * MIO08 → PID1 加热器 PWM, MIO50 → PID2 加热器 PWM,
+     * MIO09 → SPI_CS2, MIO10 → SPI_MOSI,
      * MIO11 → SPI_MISO, MIO12 → SPI_SCK, MIO13 → SPI_CS1 */
-    uint32_t pins[] = {MIO_HEATER_PWM, MIO_SPI_CS2, MIO_SPI_MOSI,
-                       MIO_SPI_MISO, MIO_SPI_SCK, MIO_SPI_CS1};
-    for (int i = 0; i < 6; ++i) {
+    uint32_t pins[] = {MIO_HEATER_PWM, MIO_HEATER_PWM2, MIO_SPI_CS2,
+                       MIO_SPI_MOSI, MIO_SPI_MISO, MIO_SPI_SCK, MIO_SPI_CS1};
+    for (int i = 0; i < 7; ++i) {
         volatile uint32_t *mio_reg = (volatile uint32_t *)((uint8_t*)g_slcr_map + MIO_PIN(pins[i]));
         *mio_reg = MIO_GPIO_CFG;
     }
@@ -81,9 +82,11 @@ int calm_hw_init(void) {
     calm_io_write(MIO_SPI_CS1,  1);    // CS1 高电平 (无效)
     calm_io_write(MIO_SPI_CS2,  1);    // CS2 高电平 (无效)
 
-    /* 默认初始化加热器 PWM 为输出并拉低 */
+    /* 默认初始化两路加热器 PWM 为输出并拉低 */
     calm_io_set_dir(MIO_HEATER_PWM, 1);
     calm_io_write(MIO_HEATER_PWM, 0);
+    calm_io_set_dir(MIO_HEATER_PWM2, 1);
+    calm_io_write(MIO_HEATER_PWM2, 0);
 
     /* 初始化两路 MAX31865 */
     max31865_init(MIO_SPI_CS1);

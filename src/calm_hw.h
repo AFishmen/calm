@@ -13,7 +13,8 @@
 #define MIO_SPI_CS2   9    // PS_MIO09 → MAX31865 #2 片选
 
 /* 加热器 PWM 输出 */
-#define MIO_HEATER_PWM 8   // PS_MIO08 → 加热器 PWM
+#define MIO_HEATER_PWM  8   // PS_MIO08  → PID1 加热器 PWM
+#define MIO_HEATER_PWM2 50  // PS_MIO50  → PID2 加热器 PWM
 
 /* MAX31865 SPI 配置常量 */
 #define MAX31865_REG_CONFIG   0x00
