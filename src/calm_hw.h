@@ -70,8 +70,9 @@ void max31865_write_reg(uint32_t cs_pin, uint8_t reg_addr, uint8_t value);
 /* 初始化 MAX31865 传感器 (设置配置寄存器) */
 void max31865_init(uint32_t cs_pin);
 
-/* 从 MAX31865 读取 RTD 电阻值 (欧姆) */
-float max31865_read_rtd(uint32_t cs_pin);
+/* 从 MAX31865 读取 RTD 电阻值 (欧姆)
+ * 返回 0 = 成功, -1 = 传感器故障 */
+int max31865_read_rtd(uint32_t cs_pin, float *resistance);
 
 /* 将 PT100 电阻值转换为摄氏温度 (Callendar-Van Dusen 简化公式) */
 float pt100_resistance_to_temp(float resistance);
